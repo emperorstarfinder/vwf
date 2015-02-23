@@ -1,4 +1,4 @@
-/// vwf/model/jPlayer.js is a sound driver
+/// vwf/model/jPlayer.js is a sound/video driver
 /// 
 /// @module vwf/model/jPlayer
 /// @requires vwf/model
@@ -14,6 +14,7 @@ define( [
     var jPlayerInstanceCreated = false;
     var audioManagerProtoId = "http-vwf-example-com-jplayer-audioManager-vwf";
     var videoManagerProtoId = "http-vwf-example-com-jplayer-videoManager-vwf";
+    var jplayerContainerId = "jp_container_1";
 
     return model.load( module, {
 
@@ -22,6 +23,15 @@ define( [
         // -- initialize ---------------------------------------------------------------------------
 
         initialize: function( options ) {
+
+            var containerDiv = document.createElement( 'div' );
+            containerDiv.id = jplayerContainerId;
+            containerDiv.className = "jp-video jp-video-360p";
+            var playerDiv = document.createElement( 'div' );
+            playerDiv.id = "jquery_jplayer_1";
+            playerDiv.className = "jp-jplayer";
+            containerDiv.appendChild( playerDiv );
+            $( "body" ).append(containerDiv);
             
         	modelDriver = this;
 
@@ -67,7 +77,13 @@ define( [
                         }
                     }
                     return found;
-                }
+                },
+                "videoEndedCallback" : function() {
+                    var mediaManagerID = modelDriver.kernel.find( undefined, "/mediaManager" )[ 0 ];
+                    var videoManagerID = modelDriver.kernel.find( mediaManagerID, "videoManager" ) [ 0 ];
+                    console.log("Video ended callback in driver fired!");
+                    modelDriver.kernel.fireEvent(videoManagerID, "videoEnded");
+                },
             };
 
             // turns on logger debugger console messages 
@@ -203,6 +219,7 @@ define( [
                         setLoop( node, propertyValue );
                         value = node.loop;
                         break;
+
                     case "playerDivId":
                         if ( propertyValue === node.playerDivId ) {
                             break;
@@ -215,10 +232,26 @@ define( [
                         if ( $existingElement.length ) {
                             node.jPlayerElement = $existingElement;
                         } else {
-                            node.jPlayerElement = $( "<div/>", {
-                                id: node.playerDivId
-                            } );
-                            $( "body" ).append( node.jPlayerElement );
+                            //Change the existing element to match the new name
+                            var playerDiv = document.createElement( 'div' );
+                            playerDiv.id = node.playerDivId;
+                            if( node.containerDivId ){
+                                // playerDiv.className = "jp-jplayer";
+                                $( "#" + node.containerDivId ).append( playerDiv );
+                            } else {
+                                $("#jp_container_1").append( playerDiv );
+                            }
+                            node.jPlayerElement = $( "#" + node.playerDivId );
+
+                            // $( "#" + jplayerContainerId ).jPlayer("option", "cssSelectorAncestor", "#" + node.playerDivId);
+                            // $( "#" + jplayerContainerId ).attr( "id", node.playerDivId );
+                            // jplayerContainerId = node.playerDivId;
+
+                            // node.jPlayerElement = $( "#" + node.playerDivId );
+                            // node.jPlayerElement = $( "<div/>", {
+                            //     id: node.playerDivId
+                            // } );
+                            // $( "body" ).append( node.jPlayerElement );
                         }
                         var fileTypes = ( node.managerType === "audio" ) ? "mp3,wav" : "m4v";
                         node.jPlayerElement.jPlayer( {
@@ -233,8 +266,14 @@ define( [
                                     setControlDivId( node, node.containerDivId );
                                 }
                             },
-                            supplied: fileTypes
+                            supplied: fileTypes,
+                            // size: { width: node.playmoderDivSize[0], height: node.playerDivSize[1] }
                         } );
+
+                        if ( node.playerDivId ) {
+                            $( "#" + node.playerDivId ).bind($.jPlayer.event.ended, this.state.videoEndedCallback );
+                        }
+                        
                         value = node.playerDivId;
                         break;
                     case "containerDivId":
@@ -244,6 +283,14 @@ define( [
                     case "posterImageUrl":
                         setPosterImageUrl( node, propertyValue );
                         value = node.posterImageUrl;
+                        break;
+                    case "playerSize":
+                        setPlayerSize( node, propertyValue );
+                        value = node.playerSize;
+                        break;
+                    case "containerSize":
+                        setContainerSize( node, propertyValue );
+                        value = node.containerSize;
                         break;
                     default:
                         break;
@@ -301,7 +348,6 @@ define( [
             return node && node[ propertyName ];
         },
 
-
         // TODO: deletingMethod
 
         // -- callingMethod --------------------------------------------------------------------------
@@ -323,6 +369,10 @@ define( [
                 switch( methodName ) {
                     
                     case "play":
+
+                        if( methodParameters ){
+                            this.kernel.setProperty( node.ID, "url", methodParameters );
+                        }
                         node.jPlayerElement.jPlayer( "play" ); 
                         break;
 
@@ -334,6 +384,9 @@ define( [
                         node.jPlayerElement.jPlayer( "stop" );
                         break;
 
+                    case "clearMedia":
+                        node.jPlayerElement.jPlayer( "clearMedia" );
+                        break;
                 }  
 
             }
@@ -341,6 +394,13 @@ define( [
         },
 
     } );
+
+    // function videoEndedCallback(){
+    //     var mediaManagerID = this.kernel.kernel.find( undefined, "/mediaManager" )[ 0 ];
+    //     var videoManagerID = this.kernel.kernel.find( mediaManagerID, "videoManager" ) [ 0 ];
+    //     console.log("Video ended callback in driver fired!");
+    //     this.kernel.fireEvent(videoManagerID, "videoEnded");
+    // }
 
     function getPrototypes( kernel, extendsID ) {
         var prototypes = [];
@@ -403,7 +463,7 @@ define( [
                     }
                     break;
                 case "video":
-                    if ( url.search( "data:video/mp4" ) === 0 ) {
+                    if ( url.search( "data:video/mp4" ) === 0 || url.search( ".mp4$" ) > -1 ) {
                         mediaObject = {
                             m4v: url,
                             poster: node.posterImageUrl
@@ -440,9 +500,9 @@ define( [
 
     function setControlDivId( node, containerDivId ) {
         node.containerDivId = containerDivId;
-        if ( node.jPlayerElement ) {
-            node.jPlayerElement.jPlayer( "option", { cssSelectorAncestor: "#" + containerDivId } );
-        }
+        // if ( node.jPlayerElement ) {
+        //     node.jPlayerElement.jPlayer( "option", { cssSelectorAncestor: "#" + containerDivId } );
+        // }
     }
 
     function setPosterImageUrl( node, posterImageUrl ) {
@@ -454,4 +514,14 @@ define( [
             } );
         }
     }
+
+    function setPlayerSize( node, playerSize ){
+        node.playerSize = playerSize;
+        node.jPlayerElement.jPlayer( "option", "size", {width: playerSize[0], height: playerSize[1]});
+    }
+
+    function setContainerSize( node, containerSize ){
+        node.containerSize = containerSize;
+    }
+
 } );
